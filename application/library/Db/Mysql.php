@@ -1,408 +1,332 @@
 <?php
-
-
-class Db_Mysql{
-    /**
-     * 数据库链接
-     * @var PDO
-     */
-    protected $db;
+/**
+ * Mysql数据库驱动类
+ */
+class db_Mysql extends db_Db{
 
     /**
-     * 数据表名
-     * @var string
+     * 架构函数 读取数据库配置信息
+     * @access public
+     * @param array $config 数据库配置数组
      */
-    public $tablename;
-
-    /**
-     * 主键
-     * @var string
-     */
-    public $pk = 'id';
-
-    /**
-     * 查询参数
-     * @var array
-     */
-    public $options = array();
-
-    /**
-     * PDO 实例化对象
-     *
-     * @var object
-     */
-    static $instance = array();
-
-    /**
-     * 配置
-     * @var string
-     */
-    protected $_config;
-
-    /**
-     * 错误信息
-     */
-    public $error = array();
-
-    /**
-     * 锁表语句
-     * @var string
-     */
-    protected $_lock = '';
-
-    /**
-     * 事务开始
-     * @var bool
-     */
-    private $_begin_transaction = false;
-
-    /**
-     * 构造函数
-     * @param string $pConfig 配置
-     */
-    public function __construct($pConfig = 'default'){
-        $this->_config = $pConfig;
-        $this->tablename || $this->tablename = strtolower(substr(get_class($this), 0, -5));
+    public function __construct($config=''){
+        if ( !extension_loaded('mysql') ) {
+            //E(L('_NOT_SUPPERT_').':mysql');
+            throw new Exception("_NOT_SUPPERT_:mysql");
+        }
+        if(!empty($config)) {
+            $this->config   =   $config;
+            if(empty($this->config['params'])) {
+                $this->config['params'] =   '';
+            }
+        }
     }
 
     /**
-     * 特殊方法实现
-     * @param string $pMethod
-     * @param array $pArgs
+     * 连接数据库方法
+     * @access public
+     * @throws ThinkExecption
+     */
+    public function connect($config='',$linkNum=0,$force=false) {
+        if ( !isset($this->linkID[$linkNum]) ) {
+            if(empty($config))  $config =   $this->config;
+            // 处理不带端口号的socket连接情况
+            $host = $config['hostname'].($config['hostport']?":{$config['hostport']}":'');
+            // 是否长连接
+            $pconnect   = !empty($config['params']['persist'])? $config['params']['persist']:$this->pconnect;
+            if($pconnect) {
+                $this->linkID[$linkNum] = mysql_pconnect( $host, $config['username'], $config['password'],131072);
+            }else{
+                $this->linkID[$linkNum] = mysql_connect( $host, $config['username'], $config['password'],true,131072);
+            }
+            if ( !$this->linkID[$linkNum] || (!empty($config['database']) && !mysql_select_db($config['database'], $this->linkID[$linkNum])) ) {
+                //E(mysql_error());
+                throw new Exception(mysql_error());
+            }
+            $dbVersion = mysql_get_server_info($this->linkID[$linkNum]);
+            //使用UTF8存取数据库
+            mysql_query("SET NAMES '".$config['charset']."'", $this->linkID[$linkNum]);
+            //设置 sql_model
+            if($dbVersion >'5.0.1'){
+                mysql_query("SET sql_mode=''",$this->linkID[$linkNum]);
+            }
+        }
+        return $this->linkID[$linkNum];
+    }
+
+    /**
+     * 释放查询结果
+     * @access public
+     */
+    public function free() {
+        mysql_free_result($this->queryID);
+        $this->queryID = null;
+    }
+
+    /**
+     * 执行查询 返回数据集
+     * @access public
+     * @param string $str  sql指令
      * @return mixed
      */
-    public function __call($pMethod, $pArgs){
-        # 连贯操作的实现
-        if(in_array($pMethod, array('field', 'table', 'where', 'order', 'limit', 'page', 'having', 'group', 'distinct'), true)){
-            $this->options[$pMethod] = $pArgs[0];
-            return $this;
-        }
-        # 统计查询的实现
-        if(in_array($pMethod, array('count', 'sum', 'min', 'max', 'avg'))){
-            $field = isset($pArgs[0])? $pArgs[0]: '*';
-            return $this->fOne("$pMethod($field)");
-        }
-        # 根据某个字段获取记录
-        if('ff' == substr($pMethod, 0, 2)){
-            return $this->where(strtolower(substr($pMethod, 2)) . "='{$pArgs[0]}'")->fRow();
-        }
-    }
-
-    /**
-     * 数据库连接
-     * @param string $pConfig 配置
-     * @return PDO
-     */
-    public static function instance($pConfig = 'default'){
-        if(empty(self::$instance[$pConfig])){
-            $tDB = Yaf_Registry::get("config")->db->toArray();
-            self::$instance[$pConfig] = new PDO($tDB['dsn'], $tDB['username'], $tDB['password'], array(PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8"));
-        }
-        return self::$instance[$pConfig];
-    }
-
-    /**
-     * 过滤数据
-     * @param array $datas 过滤数据
-     * @return bool
-     */
-    private function _filter(&$datas){
-        $tFields = $this->getFields();
-        foreach($datas as $k1 => &$v1){
-            if(isset($tFields[$k1])){
-                $v1 = strtr($v1, array('\\' => '', "'" => "'"));
-            } else {
-                unset($datas[$k1]);
-            }
-        }
-        return $datas? true: false;
-    }
-
-    /**
-     * 查询条件
-     * @param array $pOpt 条件
-     * @return array
-     */
-    private function _options($pOpt = array()){
-        # 合并查询条件
-        $tOpt = $pOpt? array_merge($this->options, $pOpt): $this->options;
-        $this->options = array();
-        # 数据表
-        empty($tOpt['table']) && $tOpt['table'] = $this->tablename;
-        empty($tOpt['field']) && $tOpt['field'] = '*';
-        return $tOpt;
-    }
-
-    /**
-     * 执行SQL
-     * @param string $sql 查询语句
-     * @return int
-     */
-    public function exec($sql){
-        $this->db || $this->db = self::instance($this->_config);
-        if($tReturn = $this->db->exec($sql)){
-            $this->error = array();
-        }
-        else{
-            $this->error = $this->db->errorInfo();
-            isset($this->error[1]) || $this->error = array();
-        }
-        return $tReturn;
-    }
-
-    /**
-     * 设置出错信息
-     * @param string $msg 信息
-     * @param int $code 错误码
-     * @param string $state 状态码
-     * @return bool
-     */
-    public function setError($msg, $code = 1, $state = 'UNKNOW'){
-        $this->error = array($state, $code, $msg);
-        return false;
-    }
-
-    /**
-     * 执行SQL，并返回结果数据
-     * @param string $sql 查询语句
-     * @return array
-     */
-    public function query($sql){
-        $this->db || $this->db = self::instance($this->_config);
-        # 锁表查询
-        if($this->_lock) {
-            $sql.= ' '.$this->_lock;
-            $this->_lock = '';
-        }
-        if(!$query = $this->db->query($sql)){
-            $this->error = $this->db->errorInfo();
-            isset($this->error[1]) || $this->error = array();
-            return array();
-        }
-        return $query->fetchAll(PDO::FETCH_ASSOC);
-    }
-
-    /**
-     * 添加记录
-     */
-    public function insert($datas, $pReplace = false){
-        if($this->_filter($datas)){
-            if($this->exec(($pReplace? "REPLACE": "INSERT") . " INTO `$this->tablename`(`".join('`,`', array_keys($datas))."`) VALUES ('".join("','", $datas)."')")){
-                return $this->db->lastInsertId();
-            }
-        }
-        return 0;
-    }
-
-    /**
-     * 更新记录
-     */
-    function update($datas){
-        # 过滤
-        if(!$this->_filter($datas)) return false;
-        # 条件
-        $tOpt = array();
-        if(isset($datas[$this->pk])){
-            $tOpt = array('where' => "$this->pk='{$datas[$this->pk]}'");
-        }
-        $tOpt = $this->_options($tOpt);
-        # 更新
-        if($datas && !empty($tOpt['where'])){
-            foreach($datas as $k1 => $v1) $tSet[] = "`$k1`='$v1'";
-            return $this->exec("UPDATE `" . $tOpt['table'] . "` SET " . join(',', $tSet) . " WHERE " . $tOpt['where']);
-        }
-        return false;
-    }
-
-    /**
-     * 删除记录
-     */
-    function del(){
-        if($tArgs = func_get_args()){
-            # 主键删除
-            $tSql = "DELETE FROM `$this->tablename` WHERE ";
-            if(intval($tArgs[0]) || count($tArgs) > 1){
-                return $this->exec($tSql . $this->pk . ' IN(' . join(',', array_map("intval", $tArgs)) . ')');
-            }
-            # 传入删除条件
-            return $this->exec($tSql . $tArgs[0]);
-        }
-        # 连贯删除
-        $tOpt = $this->_options();
-        if(empty($tOpt['where'])) return false;
-        return $this->exec("DELETE FROM `" . $tOpt['table'] . "` WHERE " . $tOpt['where']);
-    }
-
-    /**
-     * 查找一条
-     */
-    function fRow($pId = 0){
-        if(false === stripos($pId, 'SELECT')){
-            $tOpt = $pId? $this->_options(array('where' => $this->pk . '=' . abs($pId))): $this->_options();
-            $tOpt['where'] = empty($tOpt['where'])? '': ' WHERE ' . $tOpt['where'];
-            $tOpt['order'] = empty($tOpt['order'])? '': ' ORDER BY ' . $tOpt['order'];
-            $tSql = "SELECT {$tOpt['field']} FROM `{$tOpt['table']}` {$tOpt['where']} {$tOpt['order']}  LIMIT 0,1";
-        }
-        else{
-            $tSql = & $pId;
-        }
-        if($tResult = $this->query($tSql)){
-            return $tResult[0];
-        }
-        return array();
-    }
-
-    /**
-     * 查找一字段 ( 基于 fRow )
-     *
-     * @param string $pField
-     * @return string
-     */
-    function fOne($pField){
-        $this->field($pField);
-        if(($tRow = $this->fRow()) && isset($tRow[$pField])){
-            return $tRow[$pField];
-        }
-        return false;
-    }
-
-    /**
-     * 查找多条
-     */
-    function fList($pOpt = array()){
-        if(!is_array($pOpt)){
-            $pOpt = array('where' => $this->pk . (strpos($pOpt, ',')? ' IN(' . $pOpt . ')': '=' . $pOpt));
-        }
-        $tOpt = $this->_options($pOpt);
-        $tSql = "SELECT {$tOpt['field']} FROM  `{$tOpt['table']}`";
-        $this->join && $tSql .= implode(' ', $this->join);
-        empty($tOpt['where']) || $tSql .= ' WHERE ' . $tOpt['where'];
-        empty($tOpt['group']) || $tSql .= ' GROUP BY ' . $tOpt['group'];
-        empty($tOpt['order']) || $tSql .= ' ORDER BY ' . $tOpt['order'];
-        empty($tOpt['having']) || $tSql .= ' HAVING ' . $tOpt['having'];
-        empty($tOpt['limit']) || $tSql .= ' LIMIT ' . $tOpt['limit'];
-        return $this->query($tSql);
-    }
-
-    /**
-     * 查询并处理为哈西数组 ( 基于 fList )
-     *
-     * @param string $pField
-     * @return array
-     */
-    function fHash($pField){
-        $this->field($pField);
-        $tList = array();
-        $tField = explode(',', $pField);
-        if(2 == count($tField)) {
-            foreach($this->fList() as $v1) {
-                $tList[$v1[$tField[0]]] = $v1[$tField[1]];
-            }
-        }
-        else {
-            foreach($this->fList() as $v1) {
-                $tList[$v1[$tField[0]]] = $v1;
-            }
-        }
-        return $tList;
-    }
-
-    /**
-     * 数据表名
-     * @return array
-     */
-    function getTables(){
-        $this->db || $this->db = self::instance($this->_config);
-        return $this->db->query("SHOW TABLES")->fetchAll(3);
-    }
-
-    /**
-     * 数据表字段
-     * @param string $table 表名
-     * @return mixed
-     */
-    function getFields($table = ''){
-        static $fields = array();
-        $table || $table = $this->tablename;
-        # 静态 读取表字段
-        if(empty($fields[$table])){
-            # 缓存 读取表字段
-            if(is_file($tFile = APPLICATION_PATH.'/cache/db/fields/'.$table)){
-                $fields[$table] = unserialize(file_get_contents($tFile, true));
-            }
-            # 数据库 读取表字段
-            else {
-                $fields[$table] = array();
-                $this->db || $this->db = self::instance($this->_config);
-                if($tQuery = $this->db->query("SHOW FULL FIELDS FROM `$table`")){
-                    foreach($tQuery->fetchAll(2) as $v1){
-                        $fields[$table][$v1['Field']] = array('type' => $v1['Type'], 'key' => $v1['Key'], 'null' => $v1['Null'], 'default' => $v1['Default'], 'comment' => $v1['Comment']);
-                    }
-                    file_put_contents($tFile, serialize($fields[$table]));
-                }
-            }
-        }
-        return $fields[$table];
-    }
-
-    /**
-     * 联表语句
-     * @var array
-     */
-    public $join = array();
-
-    /**
-     * 联表查询
-     * @param string $table 联表名
-     * @param string $where 联表条件
-     * @param string $prefix INNER|LEFT|RIGHT 联表方式
-     * @return $this
-     */
-    function join($table, $where, $prefix = ''){
-        $this->join[] = " $prefix JOIN `$table` ON $where ";
-        return $this;
-    }
-
-    /**
-     * 事务开始
-     */
-    function begin(){
-        $this->db || $this->db = self::instance($this->_config);
-        # 已经有事务，退出事务
-        $this->back();
-        if(!$this->db->beginTransaction()){
+    public function query($str) {
+        $this->initConnect(false);
+        if ( !$this->_linkID ) return false;
+        $this->queryStr = $str;
+        //释放前次的查询结果
+        if ( $this->queryID ) {    $this->free();    }
+        //N('db_query',1);
+        // 记录开始执行时间
+        //G('queryStartTime');
+        $this->queryID = mysql_query($str, $this->_linkID);
+        $this->debug();
+        if ( false === $this->queryID ) {
+            $this->error();
             return false;
+        } else {
+            if(0===stripos($str, 'call')){ // 存储过程查询支持
+                $this->close();
+                $this->linkID  = array();
+            }
+            $this->numRows = mysql_num_rows($this->queryID);
+            return $this->getAll();
         }
-        return $this->_begin_transaction = true;
     }
 
     /**
-     * 事务提交
+     * 执行语句
+     * @access public
+     * @param string $str  sql指令
+     * @return integer|false
      */
-    function commit(){
-        if($this->_begin_transaction) {
-            $this->_begin_transaction = false;
-            $this->db->commit();
+    public function execute($str) {
+        $this->initConnect(true);
+        if ( !$this->_linkID ) return false;
+        $this->queryStr = $str;
+        //释放前次的查询结果
+        if ( $this->queryID ) {    $this->free();    }
+        //N('db_write',1);
+        // 记录开始执行时间
+        //G('queryStartTime');
+        $result =   mysql_query($str, $this->_linkID) ;
+        $this->debug();
+        if ( false === $result) {
+            $this->error();
+            return false;
+        } else {
+            $this->numRows = mysql_affected_rows($this->_linkID);
+            $this->lastInsID = mysql_insert_id($this->_linkID);
+            return $this->numRows;
+        }
+    }
+
+    /**
+     * 启动事务
+     * @access public
+     * @return void
+     */
+    public function startTrans() {
+        $this->initConnect(true);
+        if ( !$this->_linkID ) return false;
+        //数据rollback 支持
+        if ($this->transTimes == 0) {
+            mysql_query('START TRANSACTION', $this->_linkID);
+        }
+        $this->transTimes++;
+        return ;
+    }
+
+    /**
+     * 用于非自动提交状态下面的查询提交
+     * @access public
+     * @return boolen
+     */
+    public function commit() {
+        if ($this->transTimes > 0) {
+            $result = mysql_query('COMMIT', $this->_linkID);
+            $this->transTimes = 0;
+            if(!$result){
+                $this->error();
+                return false;
+            }
         }
         return true;
     }
 
     /**
      * 事务回滚
+     * @access public
+     * @return boolen
      */
-    function back(){
-        if($this->_begin_transaction) {
-            $this->_begin_transaction = false;
-            $this->db->rollback();
+    public function rollback() {
+        if ($this->transTimes > 0) {
+            $result = mysql_query('ROLLBACK', $this->_linkID);
+            $this->transTimes = 0;
+            if(!$result){
+                $this->error();
+                return false;
+            }
         }
-        return false;
+        return true;
     }
 
     /**
-     * 锁表
+     * 获得所有的查询数据
+     * @access private
+     * @return array
      */
-    function lock($sql = 'FOR UPDATE'){
-        $this->_lock = $sql;
-        return $this;
+    private function getAll() {
+        //返回数据集
+        $result = array();
+        if($this->numRows >0) {
+            while($row = mysql_fetch_assoc($this->queryID)){
+                $result[]   =   $row;
+            }
+            mysql_data_seek($this->queryID,0);
+        }
+        return $result;
+    }
+
+    /**
+     * 取得数据表的字段信息
+     * @access public
+     * @return array
+     */
+    public function getFields($tableName) {
+        $result =   $this->query('SHOW COLUMNS FROM '.$this->parseKey($tableName));
+        $info   =   array();
+        if($result) {
+            foreach ($result as $key => $val) {
+                $info[$val['Field']] = array(
+                    'name'    => $val['Field'],
+                    'type'    => $val['Type'],
+                    'notnull' => (bool) (strtoupper($val['Null']) === 'NO'), // not null is empty, null is yes
+                    'default' => $val['Default'],
+                    'primary' => (strtolower($val['Key']) == 'pri'),
+                    'autoinc' => (strtolower($val['Extra']) == 'auto_increment'),
+                );
+            }
+        }
+        return $info;
+    }
+
+    /**
+     * 取得数据库的表信息
+     * @access public
+     * @return array
+     */
+    public function getTables($dbName='') {
+        if(!empty($dbName)) {
+           $sql    = 'SHOW TABLES FROM '.$dbName;
+        }else{
+           $sql    = 'SHOW TABLES ';
+        }
+        $result =   $this->query($sql);
+        $info   =   array();
+        foreach ($result as $key => $val) {
+            $info[$key] = current($val);
+        }
+        return $info;
+    }
+
+    /**
+     * 替换记录
+     * @access public
+     * @param mixed $data 数据
+     * @param array $options 参数表达式
+     * @return false | integer
+     */
+    public function replace($data,$options=array()) {
+        foreach ($data as $key=>$val){
+            $value   =  $this->parseValue($val);
+            if(is_scalar($value)) { // 过滤非标量数据
+                $values[]   =  $value;
+                $fields[]     =  $this->parseKey($key);
+            }
+        }
+        $sql   =  'REPLACE INTO '.$this->parseTable($options['table']).' ('.implode(',', $fields).') VALUES ('.implode(',', $values).')';
+        return $this->execute($sql);
+    }
+
+    /**
+     * 插入记录
+     * @access public
+     * @param mixed $datas 数据
+     * @param array $options 参数表达式
+     * @param boolean $replace 是否replace
+     * @return false | integer
+     */
+    public function insertAll($datas,$options=array(),$replace=false) {
+        if(!is_array(reset($datas))) return false;
+        $fields = array_keys($datas[0]);
+        array_walk($fields, array($this, 'parseKey'));
+        $values  =  array();
+        foreach ($datas as $data){
+            $value   =  array();
+            foreach ($data as $key=>$val){
+                $val   =  $this->parseValue($val);
+                if(is_scalar($val)) { // 过滤非标量数据
+                    $value[]   =  $val;
+                }
+            }
+            $values[]    = '('.implode(',', $value).')';
+        }
+        $sql   =  ($replace?'REPLACE':'INSERT').' INTO '.$this->parseTable($options['table']).' ('.implode(',', $fields).') VALUES '.implode(',',$values);
+        return $this->execute($sql);
+    }
+
+    /**
+     * 关闭数据库
+     * @access public
+     * @return void
+     */
+    public function close() {
+        if ($this->_linkID){
+            mysql_close($this->_linkID);
+        }
+        $this->_linkID = null;
+    }
+
+    /**
+     * 数据库错误信息
+     * 并显示当前的SQL语句
+     * @access public
+     * @return string
+     */
+    public function error() {
+        $this->error = mysql_errno().':'.mysql_error($this->_linkID);
+        if('' != $this->queryStr){
+            $this->error .= "\n [ SQL语句 ] : ".$this->queryStr;
+        }
+        trace($this->error,'','ERR');
+        return $this->error;
+    }
+
+    /**
+     * SQL指令安全过滤
+     * @access public
+     * @param string $str  SQL字符串
+     * @return string
+     */
+    public function escapeString($str) {
+        if($this->_linkID) {
+            return mysql_real_escape_string($str,$this->_linkID);
+        }else{
+            return mysql_escape_string($str);
+        }
+    }
+
+    /**
+     * 字段和表名处理添加`
+     * @access protected
+     * @param string $key
+     * @return string
+     */
+    protected function parseKey(&$key) {
+        $key   =  trim($key);
+        if(!is_numeric($key) && !preg_match('/[,\'\"\*\(\)`.\s]/',$key)) {
+           $key = '`'.$key.'`';
+        }
+        return $key;
     }
 }
