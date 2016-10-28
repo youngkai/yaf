@@ -5,6 +5,9 @@
  * @desc 默认控制器
  * @see http://www.php.net/manual/en/class.yaf-controller-abstract.php
  */
+use log\Log;
+
+
 class IndexController extends Yaf_Controller_Abstract {
 
 	/** 
@@ -12,19 +15,19 @@ class IndexController extends Yaf_Controller_Abstract {
      * Yaf支持直接把Yaf_Request_Abstract::getParam()得到的同名参数作为Action的形参
      * 对于如下的例子, 当访问http://yourhost/firstyaf/index/index/index/name/yangkai\huoyunren 的时候, 你就会发现不同
      */
-	public function indexAction($name = "Stranger") {
-		//1. fetch query
-		$get = $this->getRequest()->getQuery("get", "default value");
+	public function indexAction() {
 
-		//2. fetch model
-		$model = new SampleModel();
+        $msg = 'youngk';
 
-		//3. assign
-		$this->getView()->assign("content", $model->selectSample());
-		$this->getView()->assign("name", "youngk");
-        alert("hahah");
+        $this->getView()->assign('name',$msg);
+
+        Log::trance($msg);
+
+
+
+        echo 'hello,world';
 
 		//4. render by Yaf, 如果这里返回FALSE, Yaf将不会调用自动视图引擎Render模板
-        return TRUE;
+        //return TRUE;
 	}
 }
