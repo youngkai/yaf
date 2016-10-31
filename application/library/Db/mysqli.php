@@ -10,14 +10,20 @@ class db_mysqli extends db_Db{
      * @param array $config 数据库配置数组
      */
     public function __construct($config=''){
-        if ( !extension_loaded('mysqli') ) {
-            //E(L('_NOT_SUPPERT_').':mysqli');
+
+        if (!extension_loaded('mysqli') ) {
+
             throw new Exception('mysqli 不支持');
+
         }
         if(!empty($config)) {
-            $this->config   =   $config;
+
+            $this->config = $config;
+
             if(empty($this->config['params'])) {
-                $this->config['params'] =   '';
+
+                $this->config['params'] = '';
+
             }
         }
     }
@@ -28,17 +34,29 @@ class db_mysqli extends db_Db{
      * @throws ThinkExecption
      */
     public function connect($config='',$linkNum=0) {
-        if ( !isset($this->linkID[$linkNum]) ) {
-            if(empty($config))  $config =   $this->config;
-            $this->linkID[$linkNum] = new mysqli($config['hostname'],$config['username'],$config['password'],$config['database'],$config['hostport']?intval($config['hostport']):3306);
+
+        //linkID没有设置
+        if (!isset($this->linkID[$linkNum]) ) {
+
+            //如果config连接的时候没有传入
+            if(empty($config))  $config = $this->config;
+
+            //将连接的object传入到linkID里头
+            $this->linkID[$linkNum] = new mysqli($config['hostname'], $config['username'], $config['password'],$config['database'], $config['hostport'] ? intval($config['hostport']) : 3306);
+
+            //如果连接失败，抛出错误
             if (mysqli_connect_errno()) throw new Exception(mysqli_connect_error());
+
+            //查询数据库的版本
             $dbVersion = $this->linkID[$linkNum]->server_version;
             
             // 设置数据库编码
             $this->linkID[$linkNum]->query("SET NAMES '".$config['charset']."'");
             //设置 sql_model
-            if($dbVersion >'5.0.1'){
+            if($dbVersion > '5.0.1'){
+
                 $this->linkID[$linkNum]->query("SET sql_mode=''");
+
             }
         }
         return $this->linkID[$linkNum];
@@ -173,7 +191,6 @@ class db_mysqli extends db_Db{
     /**
      * 获得所有的查询数据
      * @access private
-     * @param string $sql  sql语句
      * @return array
      */
     private function getAll() {
@@ -192,6 +209,7 @@ class db_mysqli extends db_Db{
     /**
      * 取得数据表的字段信息
      * @access public
+     * @param string 表单名字
      * @return array
      */
     public function getFields($tableName) {
@@ -215,10 +233,11 @@ class db_mysqli extends db_Db{
     /**
      * 取得数据表的字段信息
      * @access public
+     * @param string 数据库的名字
      * @return array
      */
     public function getTables($dbName='') {
-        $sql    = !empty($dbName)?'SHOW TABLES FROM '.$dbName:'SHOW TABLES ';
+        $sql    = !empty($dbName) ? 'SHOW TABLES FROM ' . $dbName : 'SHOW TABLES ';
         $result =   $this->query($sql);
         $info   =   array();
         if($result) {
@@ -257,21 +276,37 @@ class db_mysqli extends db_Db{
      * @return false | integer
      */
     public function insertAll($datas,$options=array(),$replace=false) {
+
         if(!is_array(reset($datas))) return false;
+
         $fields = array_keys($datas[0]);
+
         array_walk($fields, array($this, 'parseKey'));
+
         $values  =  array();
+
         foreach ($datas as $data){
+
             $value   =  array();
+
             foreach ($data as $key=>$val){
+
                 $val   =  $this->parseValue($val);
+
                 if(is_scalar($val)) { // 过滤非标量数据
+
                     $value[]   =  $val;
+
                 }
             }
+
             $values[]    = '('.implode(',', $value).')';
+
         }
+
         $sql   =  ($replace?'REPLACE':'INSERT').' INTO '.$this->parseTable($options['table']).' ('.implode(',', $fields).') VALUES '.implode(',',$values);
+
+        //var_dump($sql);exit;
         return $this->execute($sql);
     }
 
@@ -299,7 +334,7 @@ class db_mysqli extends db_Db{
         if('' != $this->queryStr){
             $this->error .= "\n [ SQL语句 ] : ".$this->queryStr;
         }
-        trace($this->error,'','ERR');
+        //trace($this->error,'','ERR');
         return $this->error;
     }
 

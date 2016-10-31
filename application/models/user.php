@@ -1,19 +1,31 @@
 <?php
+/**
+ * Created by PhpStorm.
+ * User: Huoyunren
+ * Date: 2016/10/31
+ * Time: 16:33
+ */
 
-class userModel extends Db_Mysql{
+use model\phpmodel;
 
-    public $tablename = 'test';
+class userModel extends phpmodel{
 
+    private $model;
 
-    public function getAll(){
+    public $tableName = 'user';
 
-        return $this->query("select * from test");
+    public function __construct(){
+
+        $this->model = new phpmodel();
 
     }
 
 
-    public function insertInfo($args){
-        return $this->insert($args);
+    public function search(){
+
+        return $this->model->find(["*",'table'=>'user','model'=>'user']);
+
+        //return "haha";
     }
 
 

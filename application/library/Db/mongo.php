@@ -1,14 +1,19 @@
 <?php
 /**
- *@author zqf Mongo数据库驱动 必须配合MongoModel使用
+ *Mongo数据库驱动 必须配合MongoModel使用
  */
 class db_mongo extends db_Db{
 
-    protected $_mongo           =   null; // MongoDb Object
-    protected $_collection      =   null; // MongoCollection Object
-    protected $_dbName          =   ''; // dbName
-    protected $_collectionName  =   ''; // collectionName
-    protected $_cursor          =   null; // MongoCursor Object
+    protected $_mongo           =   null;
+
+    protected $_collection      =   null;
+
+    protected $_dbName          =   '';
+
+    protected $_collectionName  =   '';
+
+    protected $_cursor          =   null;
+
     protected $comparison       =   array('neq'=>'ne','ne'=>'ne','gt'=>'gt','egt'=>'gte','gte'=>'gte','lt'=>'lt','elt'=>'lte','lte'=>'lte','in'=>'in','not in'=>'nin','nin'=>'nin');
 
     /**
@@ -17,14 +22,20 @@ class db_mongo extends db_Db{
      * @param array $config 数据库配置数组
      */
     public function __construct($config=''){
+
         if ( !class_exists('mongoClient') ) {
-            //E(L('_NOT_SUPPERT_').':mongoClient');
+
             throw new Exception('_NOT_SUPPERT_:mongoClient');
+
         }
         if(!empty($config)) {
+
             $this->config   =   $config;
+
             if(empty($this->config['params'])) {
+
                 $this->config['params'] =   array();
+
             }
         }
     }
@@ -33,17 +44,25 @@ class db_mongo extends db_Db{
      * 连接数据库方法
      * @access public
      */
-    public function connect($config='',$linkNum=0) {
+    public function connect($config='', $linkNum=0) {
+
         if ( !isset($this->linkID[$linkNum]) ) {
+
             if(empty($config))  $config =   $this->config;
+
             $host = 'mongodb://'.($config['username']?"{$config['username']}":'').($config['password']?":{$config['password']}@":'').$config['hostname'].($config['hostport']?":{$config['hostport']}":'').'/'.($config['database']?"{$config['database']}":'');
+
             try{
+
                 $this->linkID[$linkNum] = new mongoClient( $host,$config['params']);
+
             }catch (\MongoConnectionException $e){
-                //E($e->getmessage());
+
                  throw new Exception($e->getmessage());
+
             }
         }
+
         return $this->linkID[$linkNum];
     }
 
@@ -56,29 +75,32 @@ class db_mongo extends db_Db{
      * @return void
      */
     public function switchCollection($collection,$db='',$master=true){
+
         // 当前没有连接 则首先进行数据库连接
         if ( !$this->_linkID ) $this->initConnect($master);
+
         try{
+
             if(!empty($db)) { // 传人Db则切换数据库
+
                 // 当前MongoDb对象
                 $this->_dbName  =  $db;
+
                 $this->_mongo = $this->_linkID->selectDb($db);
+
             }
-            // 当前MongoCollection对象
-            /*if(C('DB_SQL_LOG')) {
-                $this->queryStr   =  $this->_dbName.'.getCollection('.$collection.')';
-            }*/
             if($this->_collectionName != $collection) {
-                //N('db_read',1);
-                // 记录开始执行时间
-                //G('queryStartTime');
+
                 $this->_collection =  $this->_mongo->selectCollection($collection);
+
                 $this->debug();
+
                 $this->_collectionName  = $collection; // 记录当前Collection名称
             }
         }catch (\MongoException $e){
-            //E($e->getMessage());
+
             throw new Exception($e->getMessage());
+
         }
     }
 
@@ -87,7 +109,9 @@ class db_mongo extends db_Db{
      * @access public
      */
     public function free() {
+
         $this->_cursor = null;
+
     }
 
     /**
@@ -97,15 +121,18 @@ class db_mongo extends db_Db{
      * @return array
      */
     public function command($command=array()) {
-       // N('db_write',1);
+
         $this->queryStr = 'command:'.json_encode($command);
+
         // 记录开始执行时间
-        //G('queryStartTime');
         $result   = $this->_mongo->command($command);
+
         $this->debug();
+
         if(!$result['ok']) {
-            //E($result['errmsg']);
+
             throw new Exception($result['errmsg']);
+
         }
         return $result;
     }
@@ -118,17 +145,22 @@ class db_mongo extends db_Db{
      * @return mixed
      */
     public function execute($code,$args=array()) {
-        //N('db_write',1);
+
         $this->queryStr = 'execute:'.$code;
+
         // 记录开始执行时间
-        //G('queryStartTime');
         $result   = $this->_mongo->execute($code,$args);
+
         $this->debug();
+
         if($result['ok']) {
+
             return $result['retval'];
+
         }else{
-            //E($result['errmsg']);
+
             throw new Exception($result['errmsg']);
+
         }
     }
 
@@ -136,13 +168,20 @@ class db_mongo extends db_Db{
      * 关闭数据库
      * @access public
      */
-    public function close() {
-        if($this->_linkID) {
+    public function close(){
+
+        if($this->_linkID){
+
             $this->_linkID->close();
+
             $this->_linkID = null;
+
             $this->_mongo = null;
+
             $this->_collection =  null;
+
             $this->_cursor = null;
+
         }
     }
 
@@ -152,8 +191,11 @@ class db_mongo extends db_Db{
      * @return string
      */
     public function error() {
+
         $this->error = $this->_mongo->lastError();
-        trace($this->error,'','ERR');
+
+        //trace($this->error,'','ERR');
+
         return $this->error;
     }
 
@@ -166,31 +208,46 @@ class db_mongo extends db_Db{
      * @return false | integer
      */
     public function insert($data,$options=array(),$replace=false) {
+
         if(isset($options['table'])) {
+
             $this->switchCollection($options['table']);
+
         }
         $this->model  =   $options['model'];
-        //N('db_write',1);
+
         if(C('DB_SQL_LOG')) {
+
             $this->queryStr   =  $this->_dbName.'.'.$this->_collectionName.'.insert(';
+
             $this->queryStr   .= $data?json_encode($data):'{}';
+
             $this->queryStr   .= ')';
         }
         try{
             // 记录开始执行时间
-            //G('queryStartTime');
             $result =  $replace?   $this->_collection->save($data):  $this->_collection->insert($data);
+
             $this->debug();
+
             if($result) {
-               $_id    = $data['_id'];
+
+               $_id = $data['_id'];
+
                 if(is_object($_id)) {
+
                     $_id = $_id->__toString();
+
                 }
-               $this->lastInsID    = $_id;
+
+               $this->lastInsID  = $_id;
+
             }
+
             return $result;
+
         } catch (\MongoCursorException $e) {
-            //E($e->getMessage());
+
             throw new Exception($e->getMessage());
         }
     }
@@ -227,21 +284,20 @@ class db_mongo extends db_Db{
      * @return integer
      */
     public function mongo_next_id($pk) {
-        //N('db_read',1);
-        /*if(C('DB_SQL_LOG')) {
-            $this->queryStr   =  $this->_dbName.'.'.$this->_collectionName.'.find({},{'.$pk.':1}).sort({'.$pk.':-1}).limit(1)';
-        }*/
         try{
             // 记录开始执行时间
-            //G('queryStartTime');
             $result   =  $this->_collection->find(array(),array($pk=>1))->sort(array($pk=>-1))->limit(1);
+
             $this->debug();
+
         } catch (\MongoCursorException $e) {
-            //E($e->getMessage());
+
             throw new Exception($e->getMessage());
+
         }
         $data = $result->getNext();
-        return isset($data[$pk])?$data[$pk]+1:1;
+
+        return isset($data[$pk]) ? $data[$pk]+1 : 1;
     }
 
     /**
@@ -252,31 +308,39 @@ class db_mongo extends db_Db{
      * @return bool
      */
     public function update($data,$options) {
+
         if(isset($options['table'])) {
+
             $this->switchCollection($options['table']);
+
         }
+
         $this->model  =   $options['model'];
-        //N('db_write',1);
+
         $query   = $this->parseWhere($options['where']);
+
         $set  =  $this->parseSet($data);
-        /*if(C('DB_SQL_LOG')) {
-            $this->queryStr   =  $this->_dbName.'.'.$this->_collectionName.'.update(';
-            $this->queryStr   .= $query?json_encode($query):'{}';
-            $this->queryStr   .=  ','.json_encode($set).')';
-        }*/
+
         try{
+
             // 记录开始执行时间
-            //G('queryStartTime');
             if(isset($options['limit']) && $options['limit'] == 1) {
+
                 $multiple   =   array("multiple" => false);
+
             }else{
+
                 $multiple   =   array("multiple" => true);
+
             }
-            $result   = $this->_collection->update($query,$set,$multiple);
+            $result = $this->_collection->update($query,$set,$multiple);
+
             $this->debug();
+
             return $result;
+
         } catch (\MongoCursorException $e) {
-            //E($e->getMessage());
+
             throw new Exception($e->getMessage());
         }
     }
@@ -288,23 +352,28 @@ class db_mongo extends db_Db{
      * @return false | integer
      */
     public function delete($options=array()) {
+
         if(isset($options['table'])) {
+
             $this->switchCollection($options['table']);
+
         }
+
         $query   = $this->parseWhere($options['where']);
+
         $this->model  =   $options['model'];
-        //N('db_write',1);
-        /*if(C('DB_SQL_LOG')) {
-            $this->queryStr   =  $this->_dbName.'.'.$this->_collectionName.'.remove('.json_encode($query).')';
-        }*/
+
         try{
+
             // 记录开始执行时间
-           // G('queryStartTime');
             $result   = $this->_collection->remove($query);
+
             $this->debug();
+
             return $result;
+
         } catch (\MongoCursorException $e) {
-            //E($e->getMessage());
+
             throw new Exception($e->getMessage());
         }
     }
@@ -316,22 +385,24 @@ class db_mongo extends db_Db{
      * @return false | integer
      */
     public function clear($options=array()){
+
         if(isset($options['table'])) {
+
             $this->switchCollection($options['table']);
         }
+
         $this->model  =   $options['model'];
-        /*N('db_write',1);
-        if(C('DB_SQL_LOG')) {
-            $this->queryStr   =  $this->_dbName.'.'.$this->_collectionName.'.remove({})';
-        }*/
         try{
+
             // 记录开始执行时间
-           // G('queryStartTime');
             $result   =  $this->_collection->drop();
+
             $this->debug();
+
             return $result;
+
         } catch (\MongoCursorException $e) {
-            //E($e->getMessage());
+
             throw new Exception($e->getMessage());
         }
     }
@@ -343,72 +414,89 @@ class db_mongo extends db_Db{
      * @return iterator
      */
     public function select($options=array()) {
+
         if(isset($options['table'])) {
+
             $this->switchCollection($options['table'],'',false);
+
         }
+
         $cache  =  isset($options['cache'])?$options['cache']:false;
+
         if($cache) { // 查询缓存检测
+
             $key =  is_string($cache['key'])?$cache['key']:md5(serialize($options));
+
             $value   =  S($key,'','',$cache['type']);
+
             if(false !== $value) {
+
                 return $value;
+
             }
         }
+
         $this->model  =   $options['model'];
-        //N('db_query',1);
+
         $query  =  $this->parseWhere($options['where']);
+
         $field =  $this->parseField($options['field']);
+
         try{
-            /*if(C('DB_SQL_LOG')) {
-                $this->queryStr   =  $this->_dbName.'.'.$this->_collectionName.'.find(';
-                $this->queryStr  .=  $query? json_encode($query):'{}';
-                $this->queryStr  .=  $field? ','.json_encode($field):'';
-                $this->queryStr  .=  ')';
-            }
-            // 记录开始执行时间
-            G('queryStartTime');*/
             $_cursor   = $this->_collection->find($query,$field);
+
             if($options['order']) {
+
                 $order   =  $this->parseOrder($options['order']);
-                /*if(C('DB_SQL_LOG')) {
-                    $this->queryStr .= '.sort('.json_encode($order).')';
-                }*/
+
                 $_cursor =  $_cursor->sort($order);
+
             }
             if(isset($options['page'])) { // 根据页数计算limit
+
                 if(strpos($options['page'],',')) {
+
                     list($page,$length) =  explode(',',$options['page']);
+
                 }else{
+
                     $page    = $options['page'];
+
                 }
-                $page    = $page?$page:1;
-                $length = isset($length)?$length:(is_numeric($options['limit'])?$options['limit']:20);
+                $page    = $page ? $page : 1;
+
+                $length = isset($length) ? $length : (is_numeric($options['limit']) ? $options['limit'] : 20);
+
                 $offset  =  $length*((int)$page-1);
+
                 $options['limit'] =  $offset.','.$length;
             }
             if(isset($options['limit'])) {
+
                 list($offset,$length) =  $this->parseLimit($options['limit']);
+
                 if(!empty($offset)) {
-                    /*if(C('DB_SQL_LOG')) {
-                        $this->queryStr .= '.skip('.intval($offset).')';
-                    }*/
+
                     $_cursor =  $_cursor->skip(intval($offset));
+
                 }
-                /*if(C('DB_SQL_LOG')) {
-                    $this->queryStr .= '.limit('.intval($length).')';
-                }*/
+
                 $_cursor =  $_cursor->limit(intval($length));
             }
             $this->debug();
+
             $this->_cursor =  $_cursor;
+
             $resultSet  =  iterator_to_array($_cursor);
+
             if($cache && $resultSet ) { // 查询缓存写入
                 //S($key,$resultSet,$cache['expire'],$cache['type']);
             }
             return $resultSet;
         } catch (\MongoCursorException $e) {
-            //E($e->getMessage());
+
             throw new Exception($e->getMessage());
+
         }
     }
 
@@ -419,38 +507,46 @@ class db_mongo extends db_Db{
      * @return array
      */
     public function find($options=array()){
+
         if(isset($options['table'])) {
+
             $this->switchCollection($options['table'],'',false);
+
         }
         $cache  =  isset($options['cache'])?$options['cache']:false;
+
         if($cache) { // 查询缓存检测
+
             $key =  is_string($cache['key'])?$cache['key']:md5(serialize($options));
-            //$value   =  S($key,'','',$cache['type']);
+
+            //这里需要改进
+            $value   =  S($key,'','',$cache['type']);
+
             if(false !== $value) {
+
                 return $value;
             }
         }
+
         $this->model  =   $options['model'];
-        //N('db_query',1);
+
         $query  =  $this->parseWhere($options['where']);
+
         $fields    = $this->parseField($options['field']);
-        /*if(C('DB_SQL_LOG')) {
-            $this->queryStr = $this->_dbName.'.'.$this->_collectionName.'.findOne(';
-            $this->queryStr .= $query?json_encode($query):'{}';
-            $this->queryStr .= $fields?','.json_encode($fields):'';
-            $this->queryStr .= ')';
-        }*/
         try{
-            // 记录开始执行时间
-            //G('queryStartTime');
             $result   = $this->_collection->findOne($query,$fields);
+
             $this->debug();
+
             if($cache && $result ) { // 查询缓存写入
+
                // S($key,$result,$cache['expire'],$cache['type']);
             }
+
             return $result;
+
         } catch (\MongoCursorException $e) {
-            //E($e->getMessage());
+
             throw new Exception($e->getMessage());
         }
     }
@@ -466,21 +562,16 @@ class db_mongo extends db_Db{
             $this->switchCollection($options['table'],'',false);
         }
         $this->model  =   $options['model'];
-        //N('db_query',1);
+
         $query  =  $this->parseWhere($options['where']);
-        /*if(C('DB_SQL_LOG')) {
-            $this->queryStr   =  $this->_dbName.'.'.$this->_collectionName;
-            $this->queryStr   .= $query?'.find('.json_encode($query).')':'';
-            $this->queryStr   .= '.count()';
-        }*/
+
         try{
-            // 记录开始执行时间
-           // G('queryStartTime');
+
             $count   = $this->_collection->count($query);
             $this->debug();
             return $count;
         } catch (\MongoCursorException $e) {
-            //E($e->getMessage());
+
             throw new Exception($e->getMessage());
         }
     }
@@ -498,17 +589,12 @@ class db_mongo extends db_Db{
         if(!empty($collection) && $collection != $this->_collectionName) {
             $this->switchCollection($collection,'',false);
         }
-        /*N('db_query',1);
-        if(C('DB_SQL_LOG')) {
-            $this->queryStr   =  $this->_dbName.'.'.$this->_collectionName.'.findOne()';
-        }*/
+
         try{
-            // 记录开始执行时间
-            //G('queryStartTime');
             $result   =  $this->_collection->findOne();
             $this->debug();
         } catch (\MongoCursorException $e) {
-            //E($e->getMessage());
+
             throw new Exception($e->getMessage());
         }
         if($result) { // 存在数据则分析字段
@@ -530,12 +616,6 @@ class db_mongo extends db_Db{
      * @access public
      */
     public function getTables(){
-        /*if(C('DB_SQL_LOG')) {
-            $this->queryStr   =  $this->_dbName.'.getCollenctionNames()';
-        }
-        N('db_query',1);
-        // 记录开始执行时间
-        G('queryStartTime');*/
         $list   = $this->_mongo->listCollections();
         $this->debug();
         $info =  array();

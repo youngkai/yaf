@@ -2,7 +2,7 @@
 /**
  * Mysql数据库驱动类
  */
-class db_Mysql extends db_Db{
+class db_mysql extends db_Db{
 
     /**
      * 架构函数 读取数据库配置信息
@@ -10,14 +10,20 @@ class db_Mysql extends db_Db{
      * @param array $config 数据库配置数组
      */
     public function __construct($config=''){
+
         if ( !extension_loaded('mysql') ) {
-            //E(L('_NOT_SUPPERT_').':mysql');
+
             throw new Exception("_NOT_SUPPERT_:mysql");
+
         }
         if(!empty($config)) {
+
             $this->config   =   $config;
+
             if(empty($this->config['params'])) {
+
                 $this->config['params'] =   '';
+
             }
         }
     }
@@ -25,30 +31,48 @@ class db_Mysql extends db_Db{
     /**
      * 连接数据库方法
      * @access public
+     * @param string
+     * @param int 连接的编号
+     * @param $force
      * @throws ThinkExecption
      */
     public function connect($config='',$linkNum=0,$force=false) {
+
         if ( !isset($this->linkID[$linkNum]) ) {
+
             if(empty($config))  $config =   $this->config;
+
             // 处理不带端口号的socket连接情况
-            $host = $config['hostname'].($config['hostport']?":{$config['hostport']}":'');
+            $host = $config['hostname'].($config['hostport'] ? ":{$config['hostport']}" : '');
+
             // 是否长连接
-            $pconnect   = !empty($config['params']['persist'])? $config['params']['persist']:$this->pconnect;
+            $pconnect = !empty($config['params']['persist']) ? $config['params']['persist'] : $this->pconnect;
+
             if($pconnect) {
+
                 $this->linkID[$linkNum] = mysql_pconnect( $host, $config['username'], $config['password'],131072);
+
             }else{
-                $this->linkID[$linkNum] = mysql_connect( $host, $config['username'], $config['password'],true,131072);
+
+                $this->linkID[$linkNum] = @mysql_connect($host, $config['username'], $config['password'], true, 131072);
+
             }
             if ( !$this->linkID[$linkNum] || (!empty($config['database']) && !mysql_select_db($config['database'], $this->linkID[$linkNum])) ) {
-                //E(mysql_error());
+
                 throw new Exception(mysql_error());
+
             }
+
             $dbVersion = mysql_get_server_info($this->linkID[$linkNum]);
+
             //使用UTF8存取数据库
             mysql_query("SET NAMES '".$config['charset']."'", $this->linkID[$linkNum]);
+
             //设置 sql_model
             if($dbVersion >'5.0.1'){
+
                 mysql_query("SET sql_mode=''",$this->linkID[$linkNum]);
+
             }
         }
         return $this->linkID[$linkNum];
@@ -59,7 +83,9 @@ class db_Mysql extends db_Db{
      * @access public
      */
     public function free() {
+
         mysql_free_result($this->queryID);
+
         $this->queryID = null;
     }
 
@@ -70,25 +96,40 @@ class db_Mysql extends db_Db{
      * @return mixed
      */
     public function query($str) {
+
         $this->initConnect(false);
+
         if ( !$this->_linkID ) return false;
+
         $this->queryStr = $str;
+
         //释放前次的查询结果
-        if ( $this->queryID ) {    $this->free();    }
-        //N('db_query',1);
-        // 记录开始执行时间
-        //G('queryStartTime');
+        if ( $this->queryID ){
+
+            $this->free();
+
+        }
         $this->queryID = mysql_query($str, $this->_linkID);
+
         $this->debug();
+
         if ( false === $this->queryID ) {
+
             $this->error();
+
             return false;
+
         } else {
+
             if(0===stripos($str, 'call')){ // 存储过程查询支持
+
                 $this->close();
+
                 $this->linkID  = array();
             }
+
             $this->numRows = mysql_num_rows($this->queryID);
+
             return $this->getAll();
         }
     }
@@ -100,22 +141,35 @@ class db_Mysql extends db_Db{
      * @return integer|false
      */
     public function execute($str) {
+
         $this->initConnect(true);
+
         if ( !$this->_linkID ) return false;
+
         $this->queryStr = $str;
+
         //释放前次的查询结果
-        if ( $this->queryID ) {    $this->free();    }
-        //N('db_write',1);
-        // 记录开始执行时间
-        //G('queryStartTime');
-        $result =   mysql_query($str, $this->_linkID) ;
+        if ( $this->queryID ) {
+
+            $this->free();
+
+        }
+        $result =   mysql_query($str, $this->_linkID);
+
         $this->debug();
-        if ( false === $result) {
+
+        if ( false === $result){
+
             $this->error();
+
             return false;
-        } else {
+
+        }else{
+
             $this->numRows = mysql_affected_rows($this->_linkID);
+
             $this->lastInsID = mysql_insert_id($this->_linkID);
+
             return $this->numRows;
         }
     }
@@ -126,13 +180,19 @@ class db_Mysql extends db_Db{
      * @return void
      */
     public function startTrans() {
+
         $this->initConnect(true);
-        if ( !$this->_linkID ) return false;
+
+        if (!$this->_linkID) return false;
+
         //数据rollback 支持
         if ($this->transTimes == 0) {
+
             mysql_query('START TRANSACTION', $this->_linkID);
+
         }
         $this->transTimes++;
+
         return ;
     }
 
@@ -142,12 +202,19 @@ class db_Mysql extends db_Db{
      * @return boolen
      */
     public function commit() {
+
         if ($this->transTimes > 0) {
+
             $result = mysql_query('COMMIT', $this->_linkID);
+
             $this->transTimes = 0;
+
             if(!$result){
+
                 $this->error();
+
                 return false;
+
             }
         }
         return true;
@@ -159,12 +226,19 @@ class db_Mysql extends db_Db{
      * @return boolen
      */
     public function rollback() {
+
         if ($this->transTimes > 0) {
+
             $result = mysql_query('ROLLBACK', $this->_linkID);
+
             $this->transTimes = 0;
+
             if(!$result){
+
                 $this->error();
+
                 return false;
+
             }
         }
         return true;
@@ -176,14 +250,22 @@ class db_Mysql extends db_Db{
      * @return array
      */
     private function getAll() {
+
         //返回数据集
         $result = array();
+
         if($this->numRows >0) {
+
             while($row = mysql_fetch_assoc($this->queryID)){
+
                 $result[]   =   $row;
+
             }
+
             mysql_data_seek($this->queryID,0);
+
         }
+
         return $result;
     }
 
@@ -193,14 +275,20 @@ class db_Mysql extends db_Db{
      * @return array
      */
     public function getFields($tableName) {
+
         $result =   $this->query('SHOW COLUMNS FROM '.$this->parseKey($tableName));
+
         $info   =   array();
+
         if($result) {
+
             foreach ($result as $key => $val) {
+
                 $info[$val['Field']] = array(
+
                     'name'    => $val['Field'],
                     'type'    => $val['Type'],
-                    'notnull' => (bool) (strtoupper($val['Null']) === 'NO'), // not null is empty, null is yes
+                    'notnull' => (bool) (strtoupper($val['Null']) === 'NO'),
                     'default' => $val['Default'],
                     'primary' => (strtolower($val['Key']) == 'pri'),
                     'autoinc' => (strtolower($val['Extra']) == 'auto_increment'),
@@ -216,15 +304,24 @@ class db_Mysql extends db_Db{
      * @return array
      */
     public function getTables($dbName='') {
+
         if(!empty($dbName)) {
+
            $sql    = 'SHOW TABLES FROM '.$dbName;
+
         }else{
+
            $sql    = 'SHOW TABLES ';
+
         }
         $result =   $this->query($sql);
+
         $info   =   array();
+
         foreach ($result as $key => $val) {
+
             $info[$key] = current($val);
+
         }
         return $info;
     }
@@ -237,14 +334,21 @@ class db_Mysql extends db_Db{
      * @return false | integer
      */
     public function replace($data,$options=array()) {
+
         foreach ($data as $key=>$val){
+
             $value   =  $this->parseValue($val);
+
             if(is_scalar($value)) { // 过滤非标量数据
+
                 $values[]   =  $value;
+
                 $fields[]     =  $this->parseKey($key);
+
             }
         }
         $sql   =  'REPLACE INTO '.$this->parseTable($options['table']).' ('.implode(',', $fields).') VALUES ('.implode(',', $values).')';
+
         return $this->execute($sql);
     }
 
@@ -256,22 +360,37 @@ class db_Mysql extends db_Db{
      * @param boolean $replace 是否replace
      * @return false | integer
      */
-    public function insertAll($datas,$options=array(),$replace=false) {
+    public function insertAll($datas, $options=array(), $replace=false) {
+
         if(!is_array(reset($datas))) return false;
+
         $fields = array_keys($datas[0]);
+
         array_walk($fields, array($this, 'parseKey'));
+
         $values  =  array();
+
         foreach ($datas as $data){
+
             $value   =  array();
+
             foreach ($data as $key=>$val){
-                $val   =  $this->parseValue($val);
+
+                $val = $this->parseValue($val);
+
                 if(is_scalar($val)) { // 过滤非标量数据
+
                     $value[]   =  $val;
+
                 }
             }
-            $values[]    = '('.implode(',', $value).')';
+
+            $values[] = '('.implode(',', $value).')';
+
         }
+
         $sql   =  ($replace?'REPLACE':'INSERT').' INTO '.$this->parseTable($options['table']).' ('.implode(',', $fields).') VALUES '.implode(',',$values);
+
         return $this->execute($sql);
     }
 
@@ -281,8 +400,11 @@ class db_Mysql extends db_Db{
      * @return void
      */
     public function close() {
+
         if ($this->_linkID){
+
             mysql_close($this->_linkID);
+
         }
         $this->_linkID = null;
     }
@@ -294,11 +416,15 @@ class db_Mysql extends db_Db{
      * @return string
      */
     public function error() {
+
         $this->error = mysql_errno().':'.mysql_error($this->_linkID);
+
         if('' != $this->queryStr){
+
             $this->error .= "\n [ SQL语句 ] : ".$this->queryStr;
+
         }
-        trace($this->error,'','ERR');
+        //trace($this->error,'','ERR');
         return $this->error;
     }
 
@@ -309,10 +435,15 @@ class db_Mysql extends db_Db{
      * @return string
      */
     public function escapeString($str) {
+
         if($this->_linkID) {
+
             return mysql_real_escape_string($str,$this->_linkID);
+
         }else{
+
             return mysql_escape_string($str);
+
         }
     }
 
@@ -323,10 +454,15 @@ class db_Mysql extends db_Db{
      * @return string
      */
     protected function parseKey(&$key) {
+
         $key   =  trim($key);
+
         if(!is_numeric($key) && !preg_match('/[,\'\"\*\(\)`.\s]/',$key)) {
+
            $key = '`'.$key.'`';
+
         }
+
         return $key;
     }
 }

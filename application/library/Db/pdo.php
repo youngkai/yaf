@@ -5,6 +5,7 @@
 class db_pdo extends db_Db{
 
     protected $PDOStatement = null;
+
     private   $table        = '';
 
     /**
@@ -15,10 +16,15 @@ class db_pdo extends db_Db{
     public function __construct($config=''){
 
         if(!empty($config)) {
+
             $this->config   =   $config;
+
             if(empty($this->config['params'])) {
+
                 $this->config['params'] =   array();
+
             }
+
             $this->dbType = $this->_getDsnType($config['dsn']);            
         }
     }
@@ -30,21 +36,29 @@ class db_pdo extends db_Db{
     public function connect($config='',$linkNum=0) {
 
         if ( !isset($this->linkID[$linkNum]) ) {
+
             if(empty($config))  $config =   $this->config;
+
             if($this->pconnect) {
+
                 $config['params'][PDO::ATTR_PERSISTENT] = true;
+
             }
             if(version_compare(PHP_VERSION,'5.3.6','<=')){ //禁用模拟预处理语句
+
                 $config['params'][PDO::ATTR_EMULATE_PREPARES]  =   false;
+
             }
-            //$config['params'][PDO::ATTR_CASE] = PDO::CASE_UPPER;
+
             if(!$config['dsn']){
+
               $config['dsn']='mysql:host='.$config['hostname'].';dbname='.$config['database'].';charset='.$config['charset'];
+
             }
             try{
                 $this->linkID[$linkNum] = new PDO($config['dsn'], $config['username'], $config['password'],$config['params']);
             }catch (\PDOException $e) {
-                //E($e->getMessage());
+
                 throw new Exception($e->getMessage());
             }
             // 因为PDO的连接切换可能导致数据库类型不同，因此重新获取下当前的数据库类型
@@ -64,7 +78,9 @@ class db_pdo extends db_Db{
      * @access public
      */
     public function free() {
+
         $this->PDOStatement = null;
+
     }
 
     /**
@@ -75,29 +91,42 @@ class db_pdo extends db_Db{
      * @return mixed
      */
     public function query($str,$bind=array()) {
+
         $this->initConnect(false);
+
         if ( !$this->_linkID ) return false;
+
         $this->queryStr = $str;
+
         if(!empty($bind)){
+
             $this->queryStr     .=   '[ '.print_r($bind,true).' ]';
+
         }        
         //释放前次的查询结果
         if ( !empty($this->PDOStatement) ) $this->free();
-        //N('db_query',1);
-        // 记录开始执行时间
-        //G('queryStartTime');
+
         $this->PDOStatement = $this->_linkID->prepare($str);
+
         if(false === $this->PDOStatement)
+
           throw new Exception($this->error());
-           // E($this->error());
+
         // 参数绑定
         $this->bindPdoParam($bind);
+
         $result =   $this->PDOStatement->execute();
+
         $this->debug();
+
         if ( false === $result ) {
+
             $this->error();
+
             return false;
+
         } else {
+
             return $this->getAll();
         }
     }
@@ -125,12 +154,10 @@ class db_pdo extends db_Db{
         }
         //释放前次的查询结果
         if ( !empty($this->PDOStatement) ) $this->free();
-        //N('db_write',1);
-        // 记录开始执行时间
-       // G('queryStartTime');
+
         $this->PDOStatement = $this->_linkID->prepare($str);
         if(false === $this->PDOStatement) {
-            //E($this->error());
+
           throw new Exception($this->error());
         }
         // 参数绑定
@@ -234,10 +261,6 @@ class db_pdo extends db_Db{
      */
     public function getFields($tableName) {
         $this->initConnect(true);
-        //if(C('DB_DESCRIBE_TABLE_SQL')) {
-            // 定义特殊的字段查询SQL
-          //  $sql   = str_replace('%table%',$tableName,C('DB_DESCRIBE_TABLE_SQL'));
-       // }else{
             switch($this->dbType) {
                 case 'MSSQL':
                 case 'SQLSRV':
@@ -295,40 +318,36 @@ class db_pdo extends db_Db{
      * @access public
      */
     public function getTables($dbName='') {
-        //if(C('DB_FETCH_TABLES_SQL')) {
-            // 定义特殊的表查询SQL
-           // $sql   = str_replace('%db%',$dbName,C('DB_FETCH_TABLES_SQL'));
-        //}else{
-            switch($this->dbType) {
-            case 'ORACLE':
-            case 'OCI':
-                $sql   = 'SELECT table_name FROM user_tables';
-                break;
-            case 'MSSQL':
-            case 'SQLSRV':
-                $sql   = "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'";
-                break;
-            case 'PGSQL':
-                $sql   = "select tablename as Tables_in_test from pg_tables where  schemaname ='public'";
-                break;
-            case 'IBASE':
-                // 暂时不支持
-                E(L('_NOT_SUPPORT_DB_').':IBASE');
-                break;
-            case 'SQLITE':
-                $sql   = "SELECT name FROM sqlite_master WHERE type='table' "
-                         . "UNION ALL SELECT name FROM sqlite_temp_master "
-                         . "WHERE type='table' ORDER BY name";
-                 break;
-            case 'MYSQL':
-            default:
-                if(!empty($dbName)) {
-                   $sql    = 'SHOW TABLES FROM '.$dbName;
-                }else{
-                   $sql    = 'SHOW TABLES ';
-                }
+
+        switch($this->dbType) {
+        case 'ORACLE':
+        case 'OCI':
+            $sql   = 'SELECT table_name FROM user_tables';
+            break;
+        case 'MSSQL':
+        case 'SQLSRV':
+            $sql   = "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'";
+            break;
+        case 'PGSQL':
+            $sql   = "select tablename as Tables_in_test from pg_tables where  schemaname ='public'";
+            break;
+        case 'IBASE':
+            // 暂时不支持
+            E(L('_NOT_SUPPORT_DB_').':IBASE');
+            break;
+        case 'SQLITE':
+            $sql   = "SELECT name FROM sqlite_master WHERE type='table' "
+                     . "UNION ALL SELECT name FROM sqlite_temp_master "
+                     . "WHERE type='table' ORDER BY name";
+             break;
+        case 'MYSQL':
+        default:
+            if(!empty($dbName)) {
+               $sql    = 'SHOW TABLES FROM '.$dbName;
+            }else{
+               $sql    = 'SHOW TABLES ';
             }
-        //}
+        }
         $result = $this->query($sql);
         $info   =   array();
         foreach ($result as $key => $val) {
@@ -416,7 +435,7 @@ class db_pdo extends db_Db{
         if('' != $this->queryStr){
             $this->error .= "\n [ SQL语句 ] : ".$this->queryStr;
         }
-        trace($this->error,'','ERR');
+        //trace($this->error,'','ERR');
         return $this->error;
     }
 

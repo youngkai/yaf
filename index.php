@@ -22,4 +22,6 @@ $application = new Yaf_Application(dirname(__FILE__) . "/conf/application.ini");
  * 则$response会被自动输出, 此处也不需要再次输出Response
  */
 
+Yaf_Registry::set('name',array('name'=>'youngkai'));
+
 $application->bootstrap()->run();

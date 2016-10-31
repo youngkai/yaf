@@ -6,6 +6,8 @@
  * @see http://www.php.net/manual/en/class.yaf-controller-abstract.php
  */
 use log\Log;
+use redis\phpredis;
+use model\phpmodel;
 
 
 class IndexController extends Yaf_Controller_Abstract {
@@ -17,17 +19,10 @@ class IndexController extends Yaf_Controller_Abstract {
      */
 	public function indexAction() {
 
-        $msg = 'youngk';
-
-        $this->getView()->assign('name',$msg);
-
-        Log::trance($msg);
 
 
-
-        echo 'hello,world';
-
-		//4. render by Yaf, 如果这里返回FALSE, Yaf将不会调用自动视图引擎Render模板
-        //return TRUE;
+        //Log::trance("hahah");
+        $model = new userModel();
+        var_dump($model->search());
 	}
 }
