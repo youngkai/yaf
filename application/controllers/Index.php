@@ -5,9 +5,6 @@
  * @desc 默认控制器
  * @see http://www.php.net/manual/en/class.yaf-controller-abstract.php
  */
-use log\Log;
-use redis\phpredis;
-use model\phpmodel;
 
 
 class IndexController extends Yaf_Controller_Abstract {
@@ -20,9 +17,8 @@ class IndexController extends Yaf_Controller_Abstract {
 	public function indexAction() {
 
 
-
-        //Log::trance("hahah");
         $model = new userModel();
+
         var_dump($model->search());
 	}
 }

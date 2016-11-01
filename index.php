@@ -1,4 +1,7 @@
 <?php
+
+error_reporting(7);
+
 /* INI配置文件支持常量替换 */
 define('APPLICATION_PATH', dirname(__FILE__) . "/application");
 
@@ -22,6 +25,5 @@ $application = new Yaf_Application(dirname(__FILE__) . "/conf/application.ini");
  * 则$response会被自动输出, 此处也不需要再次输出Response
  */
 
-Yaf_Registry::set('name',array('name'=>'youngkai'));
 
 $application->bootstrap()->run();

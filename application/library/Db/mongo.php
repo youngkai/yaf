@@ -2,7 +2,7 @@
 /**
  *Mongo数据库驱动 必须配合MongoModel使用
  */
-class db_mongo extends db_Db{
+class db_Mongo extends db_Driver{
 
     protected $_mongo           =   null;
 
@@ -93,7 +93,7 @@ class db_mongo extends db_Db{
 
                 $this->_collection =  $this->_mongo->selectCollection($collection);
 
-                $this->debug();
+                $this->debug(true);
 
                 $this->_collectionName  = $collection; // 记录当前Collection名称
             }

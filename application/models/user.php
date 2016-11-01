@@ -6,27 +6,17 @@
  * Time: 16:33
  */
 
-use model\phpmodel;
+use model\Phpmodel;
 
-class userModel extends phpmodel{
+class userModel extends Phpmodel{
 
-    private $model;
 
     public $tableName = 'user';
-
-    public function __construct(){
-
-        $this->model = new phpmodel();
-
-    }
 
 
     public function search(){
 
-        return $this->model->find(["*",'table'=>'user','model'=>'user']);
+        return $this->query("select * from user where UserId=:id",array(':id'=>1));
 
-        //return "haha";
     }
-
-
 }

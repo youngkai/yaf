@@ -111,7 +111,7 @@ class phpredis
      * @param $old int 1:返回旧的value 默认0 
      * @return $return bool true:成功 flase:失败 
      */  
-    public function set($key,$value,$type=0,$repeat=0,$time=0,$old=0)  
+    public function set($key, $value, $type=0, $repeat=0, $time=0, $old=0)
     {  
         $return = null;  
   

@@ -5,8 +5,7 @@
 
 namespace model;
 
-
-class phpmodel{
+class Phpmodel{
     // 操作状态
 
     const MODEL_INSERT = 1;      //  插入模型数据
@@ -81,6 +80,8 @@ class phpmodel{
 
     public static $_instance = array();
 
+    protected $redis = '';
+
     // 链操作方法列表
     protected $methods = array('order', 'alias', 'having', 'group', 'lock', 'distinct', 'auto', 'filter', 'validate', 'result', 'token', 'index');
 
@@ -126,6 +127,8 @@ class phpmodel{
             $this->tablePrefix = '';
 
         }
+
+        $this->redis = new \redis\phpredis();
 
         // 数据库初始化操作
         // 获取数据库操作对象
@@ -471,42 +474,67 @@ class phpmodel{
      * @return mixed
      */
     public function delete($options = array()) {
+
         if (empty($options) && empty($this->options['where'])) {
+
             // 如果删除条件为空 则删除当前数据对象所对应的记录
             if (!empty($this->data) && isset($this->data[$this->getPk()]))
+
                 return $this->delete($this->data[$this->getPk()]);
+
             else
                 return false;
         }
+
         $pk = $this->getPk();
+
         if (is_numeric($options) || is_string($options)) {
+
             // 根据主键删除记录
             if (strpos($options, ',')) {
+
                 $where[$pk] = array('IN', $options);
+
             } else {
+
                 $where[$pk] = $options;
+
             }
             $options = array();
+
             $options['where'] = $where;
         }
+
         // 分析表达式
         $options = $this->_parseOptions($options);
+
         if (empty($options['where'])) {
+
             // 如果条件为空 不进行删除操作 除非设置 1=1
             return false;
         }
         if (is_array($options['where']) && isset($options['where'][$pk])) {
+
             $pkValue = $options['where'][$pk];
+
         }
 
         if (false === $this->_before_delete($options)) {
+
             return false;
+
         }
+
         $result = $this->db->delete($options);
+
         if (false !== $result) {
+
             $data = array();
+
             if (isset($pkValue))
+
                 $data[$pk] = $pkValue;
+
             $this->_after_delete($data, $options);
         }
         // 返回删除记录个数
@@ -530,28 +558,45 @@ class phpmodel{
      * @return mixed
      */
     public function select($options = array()) {
+
         if (is_string($options) || is_numeric($options)) {
+
             // 根据主键查询
             $pk = $this->getPk();
+
             if (strpos($options, ',')) {
+
                 $where[$pk] = array('IN', $options);
+
             } else {
+
                 $where[$pk] = $options;
+
             }
+
             $options = array();
+
             $options['where'] = $where;
+
         } elseif (false === $options) { // 用于子查询 不查询只返回SQL
+
             $options = array();
+
             // 分析表达式
             $options = $this->_parseOptions($options);
+
             return '( ' . $this->db->buildSelectSql($options) . ' )';
         }
         // 分析表达式
         $options = $this->_parseOptions($options);
+
         // 判断查询缓存
         if (isset($options['cache'])) {
+
             $cache = $options['cache'];
+
             $key = is_string($cache['key']) ? $cache['key'] : md5(serialize($options));
+
             //这里要重写S方法
             $data = S($key, '', $cache);
 
@@ -562,8 +607,11 @@ class phpmodel{
             }
         }
         $resultSet = $this->db->select($options);
+
         if (false === $resultSet) {
+
             return false;
+
         }
         if (empty($resultSet)) { // 查询结果为空
             return null;
@@ -585,6 +633,7 @@ class phpmodel{
         if (isset($cache)) {
             //重写S方法
             //S($key, $resultSet, $cache);
+            $this->redis->set($key, $resultSet);
         }
         return $resultSet;
     }
@@ -741,8 +790,7 @@ class phpmodel{
                 return $data;
             }
         }
-        $resultSet = $this->db->select(array('model'=>'user'));
-        //$resultSet = $this->db->select($options);
+        $resultSet = $this->db->select($options);
         if (false === $resultSet) {
             return false;
         }
@@ -758,6 +806,7 @@ class phpmodel{
         $this->data = $data;
         if (isset($cache)) {
             //S($key, $data, $cache);
+            $this->redis->set($key, $data);
         }
         return $this->data;
     }
@@ -862,7 +911,8 @@ class phpmodel{
         if (isset($options['cache'])) {
             $cache = $options['cache'];
             $key = is_string($cache['key']) ? $cache['key'] : md5($sepa . serialize($options));
-            $data = S($key, '', $cache);
+            //$data = S($key, '', $cache);
+            $data = $this->redis->set($key, '');
             if (false !== $data) {
                 return $data;
             }
@@ -890,7 +940,8 @@ class phpmodel{
                 }
                 if (isset($cache)) {
                     //重写S方法
-                    S($key, $cols, $cache);
+                    //S($key, $cols, $cache);
+                    $data = $this->redis->set($key, $cols);
                 }
                 return $cols;
             }
@@ -904,7 +955,8 @@ class phpmodel{
                 if (true !== $sepa && 1 == $options['limit']) {
                     $data = reset($result[0]);
                     if (isset($cache)) {
-                        S($key, $data, $cache);
+                        //S($key, $data, $cache);
+                        $data = $this->redis->set($key, $data);
                     }
                     return $data;
                 }
@@ -913,7 +965,8 @@ class phpmodel{
                 }
                 if (isset($cache)) {
                     //重写S方法
-                    S($key, $array, $cache);
+                    //S($key, $array, $cache);
+                    $data = $this->redis->set($key, $array);
                 }
                 return $array;
             }
@@ -928,84 +981,84 @@ class phpmodel{
      * @param string $type 状态
      * @return mixed
      */
-    public function create($data = '', $type = '') {
-        // 如果没有传值默认取POST数据
-        if (empty($data)) {
-            //$data = I('post.');
-        } elseif (is_object($data)) {
-            $data = get_object_vars($data);
-        }
-        // 验证数据
-        if (empty($data) || !is_array($data)) {
-            $this->error = '验证数据';
-            return false;
-        }
-
-        // 状态
-        $type = $type? : (!empty($data[$this->getPk()]) ? self::MODEL_UPDATE : self::MODEL_INSERT);
-
-        // 检查字段映射
-        if (!empty($this->_map)) {
-            foreach ($this->_map as $key => $val) {
-                if (isset($data[$key])) {
-                    $data[$val] = $data[$key];
-                    unset($data[$key]);
-                }
-            }
-        }
-
-        // 检测提交字段的合法性
-        if (isset($this->options['field'])) {
-            $fields = $this->options['field'];
-            unset($this->options['field']);
-        } elseif ($type == self::MODEL_INSERT && isset($this->insertFields)) {
-            $fields = $this->insertFields;
-        } elseif ($type == self::MODEL_UPDATE && isset($this->updateFields)) {
-            $fields = $this->updateFields;
-        }
-        if (isset($fields)) {
-            if (is_string($fields)) {
-                $fields = explode(',', $fields);
-            }
-            // 判断令牌验证字段
-            if (C('TOKEN_ON'))
-                $fields[] = C('TOKEN_NAME');
-            foreach ($data as $key => $val) {
-                if (!in_array($key, $fields)) {
-                    unset($data[$key]);
-                }
-            }
-        }
-
-        // 数据自动验证
-        if (!$this->autoValidation($data, $type))
-            return false;
-
-        // 表单令牌验证
-        if (!$this->autoCheckToken($data)) {
-            $this->error = '_TOKEN_ERROR_';
-            return false;
-        }
-
-        // 验证完成生成数据对象
-        if ($this->autoCheckFields) { // 开启字段检测 则过滤非法字段数据
-            $fields = $this->getDbFields();
-            foreach ($data as $key => $val) {
-                if (!in_array($key, $fields)) {
-                    unset($data[$key]);
-                } elseif (MAGIC_QUOTES_GPC && is_string($val)) {
-                    $data[$key] = stripslashes($val);
-                }
-            }
-        }
-
-        // 创建完成对数据进行自动处理
-        $this->autoOperation($data, $type);
-        // 赋值当前数据对象
-        $this->data = $data;
-        // 返回创建的数据以供其他调用
-        return $data;
-    }
+//    public function create($data = '', $type = '') {
+//        // 如果没有传值默认取POST数据
+//        if (empty($data)) {
+//            //$data = I('post.');
+//        } elseif (is_object($data)) {
+//            $data = get_object_vars($data);
+//        }
+//        // 验证数据
+//        if (empty($data) || !is_array($data)) {
+//            $this->error = '验证数据';
+//            return false;
+//        }
+//
+//        // 状态
+//        $type = $type? : (!empty($data[$this->getPk()]) ? self::MODEL_UPDATE : self::MODEL_INSERT);
+//
+//        // 检查字段映射
+//        if (!empty($this->_map)) {
+//            foreach ($this->_map as $key => $val) {
+//                if (isset($data[$key])) {
+//                    $data[$val] = $data[$key];
+//                    unset($data[$key]);
+//                }
+//            }
+//        }
+//
+//        // 检测提交字段的合法性
+//        if (isset($this->options['field'])) {
+//            $fields = $this->options['field'];
+//            unset($this->options['field']);
+//        } elseif ($type == self::MODEL_INSERT && isset($this->insertFields)) {
+//            $fields = $this->insertFields;
+//        } elseif ($type == self::MODEL_UPDATE && isset($this->updateFields)) {
+//            $fields = $this->updateFields;
+//        }
+//        if (isset($fields)) {
+//            if (is_string($fields)) {
+//                $fields = explode(',', $fields);
+//            }
+//            // 判断令牌验证字段
+//            if (C('TOKEN_ON'))
+//                $fields[] = C('TOKEN_NAME');
+//            foreach ($data as $key => $val) {
+//                if (!in_array($key, $fields)) {
+//                    unset($data[$key]);
+//                }
+//            }
+//        }
+//
+//        // 数据自动验证
+//        if (!$this->autoValidation($data, $type))
+//            return false;
+//
+//        // 表单令牌验证
+//        if (!$this->autoCheckToken($data)) {
+//            $this->error = '_TOKEN_ERROR_';
+//            return false;
+//        }
+//
+//        // 验证完成生成数据对象
+//        if ($this->autoCheckFields) { // 开启字段检测 则过滤非法字段数据
+//            $fields = $this->getDbFields();
+//            foreach ($data as $key => $val) {
+//                if (!in_array($key, $fields)) {
+//                    unset($data[$key]);
+//                } elseif (MAGIC_QUOTES_GPC && is_string($val)) {
+//                    $data[$key] = stripslashes($val);
+//                }
+//            }
+//        }
+//
+//        // 创建完成对数据进行自动处理
+//        $this->autoOperation($data, $type);
+//        // 赋值当前数据对象
+//        $this->data = $data;
+//        // 返回创建的数据以供其他调用
+//        return $data;
+//    }
 
     // 自动表单令牌验证
     //
@@ -1285,12 +1338,18 @@ class phpmodel{
      * @return mixed
      */
     public function query($sql, $parse = false) {
+
         if (!is_bool($parse) && !is_array($parse)) {
+
             $parse = func_get_args();
+
             array_shift($parse);
+
         }
-        $sql = $this->parseSql($sql, $parse);
-        return $this->db->query($sql);
+
+        //$sql = $this->parseSql($sql, $parse);
+
+        return $this->db->query($sql, $parse);
     }
 
     /**
@@ -1306,7 +1365,7 @@ class phpmodel{
             array_shift($parse);
         }
         $sql = $this->parseSql($sql, $parse);
-        return $this->db->execute($sql);
+        return $this->db->execute($sql,$parse);
     }
 
     /**

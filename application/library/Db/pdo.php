@@ -2,7 +2,10 @@
 /**
  * @author zqf PDO数据库驱动 
  */
-class db_pdo extends db_Db{
+
+
+
+class db_Pdo extends db_Driver{
 
     protected $PDOStatement = null;
 
@@ -15,9 +18,9 @@ class db_pdo extends db_Db{
      */
     public function __construct($config=''){
 
-        if(!empty($config)) {
+        if(!empty($config)){
 
-            $this->config   =   $config;
+            $this->config = $config;
 
             if(empty($this->config['params'])) {
 
@@ -90,7 +93,7 @@ class db_pdo extends db_Db{
      * @param array $bind 参数绑定
      * @return mixed
      */
-    public function query($str,$bind=array()) {
+    public function query($str, $bind=array()) {
 
         $this->initConnect(false);
 
@@ -115,9 +118,9 @@ class db_pdo extends db_Db{
         // 参数绑定
         $this->bindPdoParam($bind);
 
-        $result =   $this->PDOStatement->execute();
+        $result =  $this->PDOStatement->execute();
 
-        $this->debug();
+        $this->debug(true);
 
         if ( false === $result ) {
 
@@ -163,7 +166,7 @@ class db_pdo extends db_Db{
         // 参数绑定
         $this->bindPdoParam($bind);        
         $result = $this->PDOStatement->execute();
-        $this->debug();
+        $this->debug(true);
         if ( false === $result) {
             $this->error();
             return false;
@@ -182,15 +185,22 @@ class db_pdo extends db_Db{
      * @return void
      */
     protected function bindPdoParam($bind){
-        // 参数绑定
-        foreach($bind as $key=>$val){
-            if(is_array($val)){
-              array_unshift($val,$key);
-            }else{
-              $val  = array($key,$val);
+        if(!empty($bind) && is_array($bind)){
+            // 参数绑定
+            foreach($bind as $key=>$val){
+
+                if(is_array($val)){
+
+                    array_unshift($val,$key);
+
+                }else{
+
+                    $val  = array($key,$val);
+
+                }
+                call_user_func_array(array($this->PDOStatement,'bindValue'),$val);
             }
-            call_user_func_array(array($this->PDOStatement,'bindValue'),$val);
-        }      
+        }
     }
 
     /**
